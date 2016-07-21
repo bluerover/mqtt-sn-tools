@@ -448,6 +448,20 @@ void mqtt_sn_send_subscribe_topic_id(int sock, uint16_t topic_id, uint8_t qos)
     return mqtt_sn_send_packet(sock, &packet);
 }
 
+void mqtt_sn_send_puback(int sock, int topic_id, int message_id)
+{
+    regack_packet_t packet;
+    packet.type = MQTT_SN_TYPE_PUBACK;
+    packet.topic_id = htons(topic_id);
+    packet.message_id = htons(message_id);
+    packet.return_code = 0x00;
+    packet.length = 0x07;
+
+    log_debug("Sending PUBACK packet...\n");
+
+    return mqtt_sn_send_packet(sock, &packet);
+}
+
 void mqtt_sn_send_pingreq(int sock)
 {
     char packet[2];
@@ -524,6 +538,29 @@ static int mqtt_sn_process_register(int sock, const register_packet_t *packet)
 
     // Respond to gateway with REGACK
     mqtt_sn_send_regack(sock, topic_id, message_id);
+
+    return 0;
+}
+
+static int mqtt_sn_process_publish(int sock, const publish_packet_t *packet)
+{
+    int message_id = ntohs(packet->message_id);
+    int topic_id = ntohs(packet->topic_id);
+
+    if (packet->flags & MQTT_SN_FLAG_QOS_1) {
+        mqtt_sn_send_puback(sock, topic_id, message_id);
+    }
+    mqtt_sn_print_publish_packet((publish_packet_t *)packet);
+
+    return 0;
+}
+
+static int mqtt_sn_process_puback(int sock, const regack_packet_t *packet)
+{
+    int message_id = ntohs(packet->message_id);
+    if(message_id == next_message_id && !strcmp(mqtt_sn_return_code_string(packet->return_code),"Accepted")) {
+        return 1;
+    }
 
     return 0;
 }
@@ -785,9 +822,8 @@ void* mqtt_sn_wait_for(uint8_t type, int sock)
             if (packet) {
                 switch(packet[1]) {
                     case MQTT_SN_TYPE_PUBLISH:
-                        mqtt_sn_print_publish_packet((publish_packet_t *)packet);
+                        mqtt_sn_process_publish(sock, (publish_packet_t*)packet);
                         break;
-
                     case MQTT_SN_TYPE_REGISTER:
                         mqtt_sn_process_register(sock, (register_packet_t*)packet);
                         break;
@@ -795,6 +831,11 @@ void* mqtt_sn_wait_for(uint8_t type, int sock)
                     case MQTT_SN_TYPE_PINGRESP:
                         // do nothing
                         break;
+
+                    case MQTT_SN_TYPE_PUBACK:
+                        if (mqtt_sn_process_puback(sock, (regack_packet_t*)packet)) {
+                            break;
+                        }
 
                     case MQTT_SN_TYPE_DISCONNECT:
                         if (type != MQTT_SN_TYPE_DISCONNECT) {

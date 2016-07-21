@@ -59,7 +59,7 @@ static void usage()
     fprintf(stderr, "  -m <message>   Message payload to send.\n");
     fprintf(stderr, "  -n             Send a null (zero length) message.\n");
     fprintf(stderr, "  -p <port>      Network port to connect to. Defaults to %s.\n", mqtt_sn_port);
-    fprintf(stderr, "  -q <qos>       Quality of Service value (0 or -1). Defaults to %d.\n", qos);
+    fprintf(stderr, "  -q <qos>       Quality of Service value (1, 0 or -1). Defaults to %d.\n", qos);
     fprintf(stderr, "  -r             Message should be retained.\n");
     fprintf(stderr, "  -t <topic>     MQTT topic name to publish to.\n");
     fprintf(stderr, "  -T <topicid>   Pre-defined MQTT-SN topic ID to publish to.\n");
@@ -146,8 +146,8 @@ static void parse_opts(int argc, char** argv)
         usage();
     }
 
-    if (qos != -1 && qos != 0) {
-        log_err("Only QoS level 0 or -1 is supported.");
+    if (qos != -1 && qos != 0 && qos != 1) {
+        log_err("Only QoS level 1, 0 or -1 is supported.");
         exit(EXIT_FAILURE);
     }
 
@@ -202,6 +202,9 @@ int main(int argc, char* argv[])
 
         // Publish to the topic
         mqtt_sn_send_publish(sock, topic_id, topic_id_type, message_data, qos, retain);
+        if (qos == 1) {
+            mqtt_sn_wait_for(MQTT_SN_TYPE_PUBACK, sock);
+        }
 
         // Finally, disconnect
         if (qos >= 0) {

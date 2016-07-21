@@ -48,6 +48,7 @@ uint8_t debug = 0;
 uint8_t single_message = FALSE;
 uint8_t clean_session = TRUE;
 uint8_t verbose = 0;
+int8_t qos = 0;
 
 uint8_t keep_running = TRUE;
 
@@ -62,6 +63,7 @@ static void usage()
     fprintf(stderr, "  -i <clientid>  ID to use for this client. Defaults to 'mqtt-sn-tools-' with process id.\n");
     fprintf(stderr, "  -k <keepalive> keep alive in seconds for this client. Defaults to %d.\n", keep_alive);
     fprintf(stderr, "  -p <port>      Network port to connect to. Defaults to %s.\n", mqtt_sn_port);
+    fprintf(stderr, "  -q <qos>       Quality of Service value (1, 0). Defaults to %d.\n", qos);
     fprintf(stderr, "  -t <topic>     MQTT topic name to subscribe to.\n");
     fprintf(stderr, "  -T <topicid>   Pre-defined MQTT-SN topic ID to subscribe to.\n");
     fprintf(stderr, "  --fe           Enables Forwarder Encapsulation. Mqtt-sn packets are encapsulated according to MQTT-SN Protocol Specification v1.2, chapter 5.5 Forwarder Encapsulation.\n");
@@ -86,7 +88,7 @@ static void parse_opts(int argc, char** argv)
     int option_index = 0;
 
     // Parse the options/switches
-    while ((ch = getopt_long(argc, argv, "1cdh:i:k:p:t:T:vV?", long_options, &option_index)) != -1)
+    while ((ch = getopt_long(argc, argv, "1cdh:i:k:p:t:q:T:vV?", long_options, &option_index)) != -1)
         switch (ch) {
         case '1':
             single_message = TRUE;
@@ -114,6 +116,10 @@ static void parse_opts(int argc, char** argv)
 
         case 'p':
             mqtt_sn_port = optarg;
+            break;
+
+        case 'q':
+            qos = atoi(optarg);
             break;
 
         case 't':
@@ -146,6 +152,11 @@ static void parse_opts(int argc, char** argv)
             usage();
             break;
         }
+
+    if (qos != 0 && qos != 1) {
+        log_err("Only QoS level 1 or 0 is supported.");
+        exit(EXIT_FAILURE);
+    }
 
     // Missing Parameter?
     if (!topic_name && !topic_id) {
@@ -206,9 +217,9 @@ int main(int argc, char* argv[])
 
         // Subscribe to the topic
         if (topic_name) {
-            mqtt_sn_send_subscribe_topic_name(sock, topic_name, 0);
+            mqtt_sn_send_subscribe_topic_name(sock, topic_name, qos);
         } else {
-            mqtt_sn_send_subscribe_topic_id(sock, topic_id, 0);
+            mqtt_sn_send_subscribe_topic_id(sock, topic_id, qos);
         }
 
         // Wait for the subscription acknowledgment
